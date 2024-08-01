@@ -1,0 +1,80 @@
+# Load required libraries
+library(rpart)
+library(stats)
+library(ROSE)
+
+# Read the data (assuming you have a CSV file)
+data <- read.csv("C:/Users/abhi0/Downloads/heart_cleveland_upload.csv")
+
+# Rename columns
+colnames(data) <- c("age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exang", "oldpeak", "slope", "ca", "thal", "condition")
+
+# Convert 'condition' to factor
+data$condition <- as.factor(data$condition)
+
+# Handle missing values (if any)
+data <- na.omit(data)
+
+# Feature scaling function
+scale_features <- function(x) {
+  return((x - mean(x)) / sd(x))
+}
+
+# Apply scaling to all numeric columns
+numeric_cols <- sapply(data, is.numeric)
+data[numeric_cols] <- lapply(data[numeric_cols], scale_features)
+
+# Check original class distribution
+print("Original class distribution:")
+print(table(data$condition))
+
+# Perform oversampling to balance the dataset
+balanced_data <- ovun.sample(condition ~ ., data = data, method = "over", N = 2 * sum(data$condition == levels(data$condition)[1]))$data
+
+# Check new class distribution
+print("Balanced class distribution:")
+print(table(balanced_data$condition))
+
+# Train models on the balanced dataset
+logistic_model <- glm(condition ~ ., data = balanced_data, family = binomial())
+dt_model <- rpart(condition ~ ., data = balanced_data, method = "class")
+
+# Create ensemble predictions
+ensemble_predict <- function(newdata) {
+  logistic_pred <- predict(logistic_model, newdata, type = "response")
+  dt_pred <- predict(dt_model, newdata, type = "prob")[, 2]
+  
+  # Combine predictions (simple average)
+  ensemble_pred <- (logistic_pred + dt_pred) / 2
+  
+  return(ensemble_pred)
+}
+
+# Function to predict for all data
+predict_heart_disease_risk <- function(data) {
+  # Make prediction
+  risk_percentage <- ensemble_predict(data[, -14]) * 100  # Exclude 'condition' column
+  
+  return(risk_percentage)
+}
+
+# Calculate risk percentages for all people in the original dataset
+risk_percentages <- predict_heart_disease_risk(data)
+
+# Create a data frame with person ID and risk percentages
+risk_df <- data.frame(
+  Person_ID = 1:nrow(data),
+  Risk_Percentage = round(risk_percentages, 2)
+)
+
+# Display the first few rows of the risk data frame
+print("First few rows of risk percentages:")
+print(head(risk_df))
+
+# If you want to save this to a CSV file:
+write.csv(risk_df, "heart_disease_risk_percentages.csv", row.names = FALSE)
+
+print("Risk percentages have been calculated for all individuals and saved to 'heart_disease_risk_percentages.csv'")
+
+View(risk_percentage)
+view(risk_df)

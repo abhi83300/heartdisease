@@ -1,0 +1,88 @@
+library(shiny)
+library(rpart)
+library(stats)
+library(ROSE)
+
+# Load your data and prepare your models here
+# (This part should be outside the UI and server functions)
+data <- read.csv("C:/Users/abhi0/Downloads/heart_cleveland_upload.csv")
+colnames(data) <- c("age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exang", "oldpeak", "slope", "ca", "thal", "condition")
+data$condition <- as.factor(data$condition)
+data <- na.omit(data)
+
+scale_features <- function(x) {
+  return((x - mean(x)) / sd(x))
+}
+numeric_cols <- sapply(data, is.numeric)
+data[numeric_cols] <- lapply(data[numeric_cols], scale_features)
+
+balanced_data <- ovun.sample(condition ~ ., data = data, method = "over", N = 2 * sum(data$condition == levels(data$condition)[1]))$data
+
+logistic_model <- glm(condition ~ ., data = balanced_data, family = binomial())
+dt_model <- rpart(condition ~ ., data = balanced_data, method = "class")
+
+ensemble_predict <- function(newdata) {
+  logistic_pred <- predict(logistic_model, newdata, type = "response")
+  dt_pred <- predict(dt_model, newdata, type = "prob")[, 2]
+  ensemble_pred <- (logistic_pred + dt_pred) / 2
+  return(ensemble_pred)
+}
+
+# Define UI
+ui <- fluidPage(
+  titlePanel("Heart Disease Risk Prediction"),
+  sidebarLayout(
+    sidebarPanel(
+      numericInput("age", "Age", 50, min = 0, max = 120),
+      selectInput("sex", "Sex", choices = c("Male" = 1, "Female" = 0)),
+      selectInput("cp", "Chest Pain Type", choices = c("Typical Angina" = 0, "Atypical Angina" = 1, "Non-anginal Pain" = 2, "Asymptomatic" = 3)),
+      numericInput("trestbps", "Resting Blood Pressure", 120, min = 0),
+      numericInput("chol", "Cholesterol", 200, min = 0),
+      selectInput("fbs", "Fasting Blood Sugar > 120 mg/dl", choices = c("False" = 0, "True" = 1)),
+      selectInput("restecg", "Resting ECG Results", choices = c("Normal" = 0, "ST-T Wave Abnormality" = 1, "Left Ventricular Hypertrophy" = 2)),
+      numericInput("thalach", "Maximum Heart Rate Achieved", 150, min = 0),
+      selectInput("exang", "Exercise Induced Angina", choices = c("No" = 0, "Yes" = 1)),
+      numericInput("oldpeak", "ST Depression", 0, min = 0, step = 0.1),
+      selectInput("slope", "Slope of Peak Exercise ST Segment", choices = c("Upsloping" = 0, "Flat" = 1, "Downsloping" = 2)),
+      numericInput("ca", "Number of Major Vessels Colored by Flourosopy", 0, min = 0, max = 3),
+      selectInput("thal", "Thalassemia", choices = c("Normal" = 1, "Fixed Defect" = 2, "Reversable Defect" = 3))
+    ),
+    mainPanel(
+      h3("Predicted Heart Disease Risk:"),
+      textOutput("risk")
+    )
+  )
+)
+
+# Define server logic
+server <- function(input, output) {
+  output$risk <- renderText({
+    # Create a data frame from inputs
+    new_data <- data.frame(
+      age = as.numeric(input$age),
+      sex = as.numeric(input$sex),
+      cp = as.numeric(input$cp),
+      trestbps = as.numeric(input$trestbps),
+      chol = as.numeric(input$chol),
+      fbs = as.numeric(input$fbs),
+      restecg = as.numeric(input$restecg),
+      thalach = as.numeric(input$thalach),
+      exang = as.numeric(input$exang),
+      oldpeak = as.numeric(input$oldpeak),
+      slope = as.numeric(input$slope),
+      ca = as.numeric(input$ca),
+      thal = as.numeric(input$thal)
+    )
+    
+    # Scale the new data
+    new_data <- as.data.frame(lapply(new_data, scale_features))
+    
+    # Make prediction
+    risk <- ensemble_predict(new_data) * 100
+    
+    paste(round(risk, 2), "%")
+  })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)

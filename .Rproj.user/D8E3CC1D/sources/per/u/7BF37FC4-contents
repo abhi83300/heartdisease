@@ -1,0 +1,25 @@
+library(shiny)
+
+# Define UI
+ui <- fluidPage(
+  titlePanel("My Shiny App"),
+  sidebarLayout(
+    sidebarPanel(
+      textInput("name", "Enter your name:", ""),
+      numericInput("age", "Enter your age:", 0, min = 0, max = 120)
+    ),
+    mainPanel(
+      textOutput("greeting")
+    )
+  )
+)
+
+# Define server logic
+server <- function(input, output) {
+  output$greeting <- renderText({
+    paste("Hello,", input$name, "! You are", input$age, "years old.")
+  })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
